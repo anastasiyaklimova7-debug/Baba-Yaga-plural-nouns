@@ -260,7 +260,7 @@ button:focus-visible { outline: 4px solid #fff; outline-offset: 3px; }
   var state = 'idle';            // idle | play | between | finale | over
   var paused = true, gen = 0, started = false, modalMode = 'intro';
   var W = 0, H = 0, D = 200, bs = 100, playTop = 100, playBot = 500, vT = 150, respawnAt = 0;
-  var bx = 0, by = 300, targetY = 300;
+  var bx = 0, by = 300, targetY = 300, aimY = 300, velY = 0;
   var keys = { up: false, down: false };
   var tokens = [], pending = [], tNow = 0, lastT = 0;
   var CD = 0.75, cdLeft = 0, cdShown = 0;
@@ -381,7 +381,7 @@ button:focus-visible { outline: 4px solid #fff; outline-offset: 3px; }
   }
   function clampY() {
     var minY = playTop + bs * 0.4, maxY = playBot - bs * 0.4;
-    by = clamp(by, minY, maxY); targetY = clamp(targetY, minY, maxY);
+    by = clamp(by, minY, maxY); targetY = clamp(targetY, minY, maxY); aimY = clamp(aimY, minY, maxY);
   }
   function placeBaba() {
     if (state === 'finale') return;
@@ -492,10 +492,16 @@ button:focus-visible { outline: 4px solid #fff; outline-offset: 3px; }
     // steer height
     targetY += ((keys.down ? 1 : 0) - (keys.up ? 1 : 0)) * 900 * dt;
     clampY();
-    var py = by;
-    by += (targetY - by) * Math.min(1, dt * 12);
-    var vy = by - py;
-    baba.style.rotate = clamp(vy * 1.6, -14, 14) + 'deg';
+    // smooth steering: the pointer target is eased first, then a critically damped spring glides Baba to it (no jitter, no overshoot)
+    aimY += (targetY - aimY) * Math.min(1, dt * 18);
+    var st = 0.11, om = 2 / st, xx = om * dt, ex = 1 / (1 + xx + 0.48 * xx * xx + 0.235 * xx * xx * xx);
+    var chg = by - aimY, orig = aimY, maxC = 1700 * st;
+    chg = clamp(chg, -maxC, maxC); aimY = by - chg;
+    var tmp = (velY + om * chg) * dt; velY = (velY - om * tmp) * ex;
+    var out = aimY + (chg + tmp) * ex;
+    if ((orig - by > 0) === (out > orig)) { out = orig; velY = 0; }
+    aimY = orig; by = out;
+    baba.style.rotate = clamp(velY * 0.012, -14, 14) + 'deg';
 
     placeBaba();
 
@@ -634,7 +640,7 @@ button:focus-visible { outline: 4px solid #fff; outline-offset: 3px; }
     endBox.hidden = true;
     started = true; paused = false; state = 'idle';
     layout();
-    by = targetY = (playTop + playBot) / 2; placeBaba();
+    by = targetY = aimY = (playTop + playBot) / 2; velY = 0; placeBaba();
     showWord();
   }
 
@@ -662,7 +668,7 @@ button:focus-visible { outline: 4px solid #fff; outline-offset: 3px; }
   wordEl.textContent = 'cat';
   heartN.textContent = String(LIVES);
   layout();
-  by = targetY = (playTop + playBot) / 2; placeBaba();
+  by = targetY = aimY = (playTop + playBot) / 2; velY = 0; placeBaba();
   openModal('intro');
   requestAnimationFrame(frame);
 })();
